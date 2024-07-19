@@ -13,16 +13,19 @@ import org.springframework.boot.LazyInitializationExcludeFilter;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
-
+import java.util.stream.Stream;
 
 @RestController
 @RequestMapping("/test")
@@ -39,17 +42,19 @@ public class WebfluxController {
 
 
     @GetMapping("/webflux")
-    public Mono<String> webflux() {
+    public Mono<Void> webflux() {
         log.info("Webflux started");
+        Path path = Paths.get(FILE_PATH);
+
         long startTime = System.currentTimeMillis();
-        return Mono.fromCallable(() -> {List<String> problems = Files.readAllLines(Paths.get(FILE_PATH));
-            List<Integer> results = problems.stream()
-                    .map(this::solveProblem)
-                    .toList();
-            long endTime = System.currentTimeMillis();
-            log.info("Webflux finished in " + (endTime - startTime) + " ms");
-            return "Solved " + results.size() + " problems with WebFlux!";
-        });
+
+        return Flux
+                .using(() -> Files.lines(path), Flux::fromStream, Stream::close)
+                .parallel()
+                .runOn(Schedulers.parallel())
+                .map(this::solveProblem)
+//                .doOnNext((data) -> log.info("{}", System.currentTimeMillis()- startTime))
+                .then();
     }
 
 
